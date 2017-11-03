@@ -1,49 +1,428 @@
 <!doctype html>
 <html>
-	<head>
-		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-		<title>reveal.js</title>
+  <title>raft</title>
 
-		<link rel="stylesheet" href="css/reveal.css">
-		<link rel="stylesheet" href="css/theme/black.css">
+  <link rel="stylesheet" href="css/reveal.css">
+  <link rel="stylesheet" href="css/theme/night.css">
 
-		<!-- Theme used for syntax highlighting of code -->
-		<link rel="stylesheet" href="lib/css/zenburn.css">
+  <!-- Theme used for syntax highlighting of code -->
+  <link rel="stylesheet" href="lib/css/zenburn.css">
 
-		<!-- Printing and PDF exports -->
-		<script>
-			var link = document.createElement( 'link' );
-			link.rel = 'stylesheet';
-			link.type = 'text/css';
-			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
-			document.getElementsByTagName( 'head' )[0].appendChild( link );
-		</script>
-	</head>
-	<body>
-		<div class="reveal">
-			<div class="slides">
-				<section>Slide 1</section>
-				<section>Slide 2</section>
-			</div>
-		</div>
+  <link rel="stylesheet" href="css/custom.css">
 
-		<script src="lib/js/head.min.js"></script>
-		<script src="js/reveal.js"></script>
+  <!-- Printing and PDF exports -->
+  <script>
+  var link = document.createElement( 'link' );
+  link.rel = 'stylesheet';
+  link.type = 'text/css';
+  link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+  document.getElementsByTagName( 'head' )[0].appendChild( link );
+  </script>
+  </head>
+  <body>
+  <div class="reveal">
+  <div class="slides">
+  <section>
+    <img src="raft-logo.png" alt="raft logo" title="raft logo" style="max-width: 5em; float: left;"/>
+    <h4>In Search of an Understandable Consensus Algorithm
+(Extended Version)</h4>
+    <p>AKA: The Raft Paper</p>
+    <p style="margin-top: 2em; clear: both;">Chris Hiestand, Systems Consultant at <a href="https://kistek.consulting/">Kistek LLC</a></p>
 
-		<script>
-			// More info about config & dependencies:
-			// - https://github.com/hakimel/reveal.js#configuration
-			// - https://github.com/hakimel/reveal.js#dependencies
-			Reveal.initialize({
-				dependencies: [
-					{ src: 'plugin/markdown/marked.js' },
-					{ src: 'plugin/markdown/markdown.js' },
-					{ src: 'plugin/notes/notes.js', async: true },
-					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } }
-				]
-			});
-		</script>
-	</body>
+    <aside class="notes">
+      <p>Has anyone implemented raft?</p>
+      <p>Has anyone knowingly used raft in any software? What program?</p>
+      <p>My experience with etcd building a distributed monitoring and alerting system</p>
+    </aside>
+
+  </section>
+
+  <section>
+    <h3>State Machine</h3>
+    <p>Stores state on a single node. How do you make this robust to failure?</p>
+  </section>
+
+  <section>
+
+    <h3>Replicated State Machine</h3>
+    <img src="figure-1-state-machine.png" alt="state machine" title="state machine" style="max-width: 15em;"/>
+    <aside class="notes">
+      <p>Common implementation: replicated log</p>
+    </aside>
+
+  </section>
+
+  <section>
+    <h4>Paxos, industry standard 1989 - ?</h4>
+
+    <blockquote>There are significant gaps between the description of the Paxos algorithm and the needs of a real-world system... the final system will be based on an un- proven protocol</blockquote> - Chubby (distributed locking algorithm) Authors
+
+  </section>
+
+  <section>
+
+    <h3>More Paxos Trashtalk</h3>
+
+    <blockquote>“The dirty little secret of the NSDI community is that at most five people really, truly understand every part of Paxos;-).”</blockquote> - NSDI reviewer
+  </section>
+
+  <section>
+    <h3>State of Paxos</h3>
+    <p>There is no consensus on how to implement paxos</p>
+  </section>
+
+  <section>
+    <h3>Algorithm Priorities</h3>
+    <ul>
+      <li>Space Complexity</li>
+      <li>Time Complexity</li>
+      <li>Throughput</li>
+      <li>Scalability</li>
+      <li>Reliability</li>
+      <li>Cool Factor</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3>Raft Algorithm Priorities</h3>
+    <ul>
+      <li style="font-weight: bold;">Understandable</li>
+      <li>Correct</li>
+      <li>Complete</li>
+      <li>Readily Used</li>
+      <li>Extendible</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3>Minimize State Space</h3>
+    <ul>
+      <li>Handle multiple problems with a single mechanism</li>
+      <li>Handle multiple problems with a single mechanism</li>
+      <li>Eliminate special cases</li>
+      <li>Maximize coherence</li>
+      <li>Minimize nondeterminism</li>
+    </ul>
+    <p class="cite">source: <a href="https://youtu.be/vYp4LYbnnW8?t=14m2s">https://youtu.be/vYp4LYbnnW8?t=14m2s</a></p>
+
+  </section>
+
+  <section>
+    <h3>Problem Decomposition</h3>
+    <ul>
+      <li>Leader election</li>
+      <li>Log replication</li>
+      <li>Safety</li>
+    </ul>
+  </section>
+
+  <section style="font-size: smaller;">
+    <h3>Vocabulary</h3>
+    <p>log: where serialized writes are stored</p>
+    <p>term: monotomically increasing, equal to number of elections, current term sent with all RPCs</p>
+    <p>log index: monotomically increasing, number of particular log entry</p>
+    <p>match index: within leader's state for each follower, most recent log index stored by both the leader and follower</p>
+    <p>next index: within leader's state for each follower, next log index of entry leader will send to that follower</p>
+  </section>
+
+  <section style="font-size: smaller;">
+    <h3>Term</h3>
+    <img src="figure-5-terms.png" alt="terms" title="terms" style="max-width: 15em;"/>
+  </section>
+
+  <section>
+    <img src="hands.jpg" alt="hands" title="hands" style="max-width: 5em; float: right;"/>
+
+    <h3>Odd Deployment Topologies</h3>
+    <table style="clear: both;">
+      <tr><th colspan="2">cluster count</th><th colspan="2">failure tolerance</th><th>majority/quorum</th></tr>
+      <tr><td>3</td><td style="opacity: 0.1;">-</td><td>1</td><td style="opacity: 0.1;">=</td><td>2</td></tr>
+      <tr><td>5</td><td style="opacity: 0.1;">-</td><td>2</td><td style="opacity: 0.1;">=</td><td>3</td></tr>
+      <tr><td>7</td><td style="opacity: 0.1;">-</td><td>3</td><td style="opacity: 0.1;">=</td><td>4</td></tr>
+    </table>
+    <p class="cite">source: <a href="https://github.com/coreos/etcd/blob/master/raft/README.md">https://github.com/coreos/etcd/blob/master/raft/README.md</a></p>
+  </section>
+
+  <section>
+    <h3>Server States</h3>
+    <img src="figure-4-member-states.png" alt="member states" title="member states" style="max-width: 15em;"/>
+    <p>note: All members have root/admin level authority/trust in all states</p>
+  </section>
+
+<!-- LEADER ELECTION -->
+
+<section>
+  <p>Leader Election</p>
+  <p>The leader is the only member of the cluster who can serve client reads or writes</p>
+  <p>Any member can become a leader nearly anytime in common scenarios</p>
+  <p><a href="https://chrishiestand.github.io/raftscope/" target="_blank">Example</a></p>
+</section>
+
+<section>
+  <p>Follower Until</p>
+  <ul>
+    <li>Leader timeout → Candidate (new term)</li>
+  </ul>
+</section>
+
+<section>
+  <p>Candidate Until</p>
+  <ul>
+    <li>Election win → Leader</li>
+    <li>Election timeout → Candidate (new term)</li>
+    <li>Election lost (AppendEntriesRPC s.t. remote term &gt;= local term) → Follower</li>
+  </ul>
+</section>
+
+<section>
+  <p>Leader Until</p>
+  <ul>
+    <li>New term discovered (remote term &gt; local term) → Follower</li>
+  </ul>
+</section>
+
+<section>
+  <h3>Randomized Election Timeouts</h3>
+  <p>Leader Election - Probability Trend of Repeated Collisions</p>
+  <img src="election-collision-probability.png" alt="election collision probability" title="election collision probability" style="max-width: 15em;"/>
+</section>
+
+
+<!-- LOG REPLICATION -->
+
+  <section>
+    <h3>Normal Log Replication</h3>
+    <p><a href="https://chrishiestand.github.io/raftscope/" target="_blank">Example</a></p>
+  </section>
+
+  <section>
+    <h3>Missing and Extraneous Log Entries</h3>
+    <p><a href="https://chrishiestand.github.io/raftscope/#log%20replication" target="_blank">Example</a></p>
+  </section>
+
+<!-- SAFETY -->
+
+  <section>
+    <h3>Safety</h3>
+    <p>leader has complete ownership of the replicated log</p>
+    <img src="figure-3-safety.png" alt="safety spec" title="safety" style="max-width: 15em;"/>
+  </section>
+
+  <section>
+    <h3>Safety - Leadership Requirement</h3>
+    <p>"Leader Completeness" means there can be no leader with stale logs: <a href="https://chrishiestand.github.io/raftscope/#No%20Stale%20Leaders" target="_blank">Example</a></p>
+  </section>
+
+  <section>
+    <h4>Committing entries from previous terms</h4>
+    <p>Leader only commits entry from previous term if it has that entry in its own log</p>
+
+    <aside class="notes">
+      <p>For me, the least clear part of the paper</p>
+    </aside>
+  </section>
+
+  <section>
+    <p>Raft RPCs for Basic Functionality</p>
+    <ul>
+      <li>RequestVote</li>
+      <li>AppendEntries</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3>RPCs for Extended Functionality</h3>
+    <ul>
+      <li>InstallSnapshot</li>
+    </ul>
+  </section>
+
+
+  <!-- MEMBERSHIP CHANGES -->
+
+  <section>
+    <h3>Membership Changes</h3>
+    <p>Three Phases</p>
+    <ol>
+      <li>Old Configuration</li>
+      <li>Joint Configuration (Old + New)</li>
+      <li>New Configuration</li>
+    </ol>
+
+    <aside class="notes">
+      <p>Configurations stored in separate part of the replicated log</p>
+      <p>Reminds me of a transaction</p>
+    </aside>
+
+  </section>
+
+  <section>
+    <h3>Joint Configuration</h3>
+    <p>Consensus requires separate majorities from <i>both</i> the old and new configurations</p>
+    <img src="figure-11-joint-configuration.png" alt="joint configuration" title="joint configuration" style="max-width: 10em;"/>
+  </section>
+
+  <section>
+    <h3>Preventing Removed Server Problems</h3>
+    <blockquote>To prevent this problem, servers disregard RequestVote RPCs when they believe a current leader exists. Specifically, if a server receives a RequestVote RPC within the minimum election timeout of hearing from a current leader, it does not update its term or grant its vote...</blockquote>
+  </section>
+
+
+  <!-- LOG COMPACTION / SNAPSHOT -->
+
+
+  <section>
+    <h3>Snapshots</h3>
+    <ul>
+      <li>Each member generates its own snapshot</li>
+      <li>A snapshot is the contents of the state machine + metadata at a specific log index, the log index and all log entries before it are then discarded</li>
+      <li>InstallSnapshot RPC used to catch up behind followers</li>
+      <li>Followers may make snapshots indepdent of leader because of log safety</li>
+    </ul>
+
+    <aside class="notes">
+      <p>Additional details for handling snapshot/entry timing issues</p>
+    </aside>
+  </section>
+
+  <!-- CLIENT INTERACTION  -->
+
+  <section>
+    <h3>Clients only talk to leader</h3>
+    <p>This means that all writes and reads must go through the leader</p>
+    <p>Writes AND READS must have consensus verified before leader replies OK to client</p>
+
+    <aside class="notes">
+      <p>Buried the "slow reads" detail in the paper</p>
+    </aside>
+
+  </section>
+
+  <!-- USABILITY STUDY -->
+
+  <section>
+    <h3>Understandability</h3>
+    <p>Teaching experiment - students learn paxos and raft and are quizzed</p>
+    <p>Experiment setup to minimize bias</p>
+  </section>
+
+  <section>
+    <h3>Correctness</h3>
+    <p>Various Proofs</p>
+  </section>
+
+  <section>
+    <h3>Performance</h3>
+    <p>Similar to Paxos</p>
+    <p>Leaves additional optimizations to implementers</p>
+  </section>
+
+
+  <!-- REAL WORLD -->
+
+  <section>
+    <h4>etcd standard reads</h4>
+  <ul>
+    <li>Linearizable read-only queries served by both the leader and followers
+    <ul>
+    <li>leader checks with quorum and bypasses Raft log before processing read-only queries</li>
+    <li>followers asks leader to get a safe read index before processing read-only queries</li>
+    </ul>
+    </li>
+  </ul>
+  <p class="cite">source: <a href="https://github.com/coreos/etcd/blob/master/raft/README.md">https://github.com/coreos/etcd/blob/master/raft/README.md</a></p>
+</section>
+
+  <section>
+    <h4>etcd lease-based reads</h4>
+
+    <ul>
+      <li>Lease-based linearizable read-only queries served by both the leader and followers
+      <ul>
+      <li>leader bypasses Raft log and processing read-only queries locally</li>
+      <li>followers asks leader to get a safe read index before processing read-only queries</li>
+      <li>this approach relies on the clock of the all the machines in raft group</li>
+      </ul>
+      </li>
+    </ul>
+    <p class="cite">source: <a href="https://github.com/coreos/etcd/blob/master/raft/README.md">https://github.com/coreos/etcd/blob/master/raft/README.md</a></p>
+  </section>
+
+  <section>
+
+    <h4>etcd "optional enhancements" to raft</h4>
+
+  <ul style="font-size: smaller;">
+    <li>Optimistic pipelining to reduce log replication latency</li>
+    <li>Flow control for log replication</li>
+    <li>Batching Raft messages to reduce synchronized network I/O calls</li>
+    <li>Batching log entries to reduce disk synchronized I/O</li>
+    <li>Writing to leader's disk in parallel</li>
+    <li>Internal proposal redirection from followers to leader</li>
+    <li>Automatic stepping down when the leader loses quorum</li>
+  </ul>
+  <p class="cite">source: <a href="https://github.com/coreos/etcd/blob/master/raft/README.md">https://github.com/coreos/etcd/blob/master/raft/README.md</a></p>
+
+</section>
+
+<section>
+
+  <h4>Consul Read Modes </h4>
+  <ul>
+    <li>default - leader may independently services all reads with timed lease on leadership</li>
+    <li>consistent - raft standard (leader verifies with majority)</li>
+    <li>stale - any node may independently serve any (arbitrarily stale) read</li>
+  </ul>
+  <p class="cite">source: <a href="https://www.consul.io/docs/internals/consensus.html#consistency-modes">https://www.consul.io/docs/internals/consensus.html#consistency-modes</a></p>
+
+</section>
+
+<section>
+  <h3>Consul Real World Performance</h3>
+
+  <h4>Consul: 100-9999 TPS </h4>
+  <blockquote>Although Consul is not designed to be a high-throughput write system, it should handle on the order of hundreds to thousands of transactions per second depending on network and hardware configuration.</blockquote>
+  <p class="cite">source: <a href="https://www.consul.io/docs/internals/consensus.html#raft-protocol-overview">https://www.consul.io/docs/internals/consensus.html#raft-protocol-overview</a></p>
+
+</section>
+
+<section>
+
+  <h3>Thank You for Listening!</h3>
+
+  <p>What is the consensus on Raft?</p>
+</section>
+
+
+
+  </div>
+  </div>
+
+  <script src="lib/js/head.min.js"></script>
+  <script src="js/reveal.js"></script>
+
+  <script>
+  // More info about config & dependencies:
+  // - https://github.com/hakimel/reveal.js#configuration
+  // - https://github.com/hakimel/reveal.js#dependencies
+  Reveal.initialize({
+
+    history: true,
+    center: false,
+
+    transition: 'convex', // none/fade/slide/convex/concave/zoom
+
+    dependencies: [
+      { src: 'plugin/markdown/marked.js' },
+      { src: 'plugin/markdown/markdown.js' },
+      { src: 'plugin/notes/notes.js', async: true },
+      { src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } }
+    ]
+  });
+  </script>
+  </body>
 </html>

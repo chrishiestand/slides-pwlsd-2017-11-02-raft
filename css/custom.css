@@ -1,0 +1,13 @@
+.reveal figcaption {
+  font-size: smaller;
+}
+.reveal figcaption.cite, p.cite {
+  font-size: small;
+}
+
+.reveal li, .reveal ul>li>ul {
+    margin-top: 0.5em;
+}
+.reveal li:first-child  {
+    margin-top: 0em;
+}
